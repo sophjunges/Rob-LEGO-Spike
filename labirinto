@@ -1,0 +1,102 @@
+from hub import port
+import motor, motor_pair, distance_sensor, runloop
+
+
+MOTOR_ESQUERDO = port.D
+MOTOR_DIREITO = port.C
+SENSOR_DISTANCIA = port.F
+
+VELOCIDADE = 400
+
+DISTANCIA_OBSTACULO = 80
+
+VELOCIDADE_GIRO = 300
+
+
+motor_pair.pair(
+    motor_pair.PAIR_1,
+    MOTOR_ESQUERDO,
+    MOTOR_DIREITO
+)
+
+
+
+def andar():
+    motor_pair.move(
+        motor_pair.PAIR_1,
+        0,
+        velocity=VELOCIDADE
+    )
+
+
+def parar():
+    motor_pair.stop(
+        motor_pair.PAIR_1,
+        stop=motor.BRAKE
+    )
+
+
+async def virar_direita_90():
+
+    await motor_pair.move_for_degrees(
+        motor_pair.PAIR_1,
+        180,
+        100,
+        velocity=VELOCIDADE_GIRO
+    )
+
+async def virar_180():
+
+    await motor_pair.move_for_degrees(
+        motor_pair.PAIR_1,
+        360,
+        100,
+        velocity=VELOCIDADE_GIRO
+    )
+
+
+def obstaculo_detectado():
+
+    distancia = distance_sensor.distance(
+        SENSOR_DISTANCIA
+    )
+
+    if distancia != -1 and distancia <= DISTANCIA_OBSTACULO:
+        return True
+
+    return False
+
+
+async def main():
+
+    while True:
+
+        andar()
+
+        if obstaculo_detectado():
+
+            parar()
+
+            await virar_direita_90()
+
+            await runloop.sleep_ms(150)
+
+
+            distancia = distance_sensor.distance(
+                SENSOR_DISTANCIA
+            )
+
+            if distancia != -1 and distancia <= DISTANCIA_OBSTACULO:
+
+                # Ainda existe parede na frente.
+                # Então faz 180°.
+                parar()
+
+                await virar_180()
+
+                await runloop.sleep_ms(150)
+
+        await runloop.sleep_ms(10)
+
+
+runloop.run(main())
