@@ -1,4 +1,10 @@
 DESCRIÇÃO :
+
 Projeto acadêmico utilizando o LEGO Spike e programação em python.
+
 OBJETIVOS:
-aprender a escrever códigos na linguagem python e entender como funcionam os sensores e motores e como lidar com eles
+
+Desenvolver conhecimentos de programação em Python;
+compreender o funcionamento dos motores;
+utilizar sensores para controlar o comportamento do robô;
+desenvolver lógica para resolver diferentes desafios.
