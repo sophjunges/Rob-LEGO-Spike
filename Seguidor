@@ -1,0 +1,23 @@
+from hub import port
+import motor_pair, color_sensor, runloop, color
+
+motor_pair.pair(motor_pair.PAIR_1, port.C, port.D)
+
+def encontrou_vermelho():
+    return color_sensor.color(port.E) == color.RED
+
+async def seguir_linha():
+    while (True):
+        if (color_sensor.reflection(port.E) > 90):
+
+            motor_pair.move(motor_pair.PAIR_1, 30, velocity= 100)
+        else:
+            motor_pair.move(motor_pair.PAIR_1, -30, velocity= 100)
+        if encontrou_vermelho():
+            motor_pair.stop(motor_pair.PAIR_1)
+            await motor_pair.move_tank_for_degrees(motor_pair.PAIR_1, 200, 600, -600)
+
+async def main():
+    await seguir_linha()
+
+runloop.run(main())
