@@ -1,0 +1,15 @@
+from hub import port
+import motor, motor_pair, color_sensor, runloop, sys
+motor_pair.pair(motor_pair.PAIR_1, port.A, port.B)
+# Segue o lado direito da linha preta (borda preta-branca).
+# Para seguir a borda branca-preta, mudar a condição de erro para (reflection - 50)
+async def seguidor_de_linha():
+    while (True):
+
+        erro = 84 - color_sensor.reflection(port.E)
+        correcao = int(erro * 2.05)
+        motor_pair.move(motor_pair.PAIR_1, correcao, velocity = 300)
+
+async def main():
+    await seguidor_de_linha()
+runloop.run(main())
