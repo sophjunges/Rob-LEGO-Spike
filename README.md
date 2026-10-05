@@ -1,6 +1,6 @@
 DESCRIÇÃO :
 
-Projeto acadêmico utilizando o LEGO Spike e programação em python.
+Projeto acadêmico, em grupo, utilizando o LEGO Spike e programação em python.
 
 OBJETIVOS:
 
