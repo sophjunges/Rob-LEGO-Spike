@@ -1,0 +1,207 @@
+from hub import port
+import motor, motor_pair, distance_sensor, color_sensor, color, runloop
+
+# Configuração de Portas
+MOTOR_ESQUERDO = port.A
+MOTOR_DIREITO = port.B
+SENSOR_DISTANCIA = port.C
+SENSOR_COR = port.E
+
+# Parâmetros de Movimento
+VELOCIDADE = 200
+VELOCIDADE_GIRO = 150
+CM_PER_ROT = 17.6
+DISTANCIA_LIMITE_CM = 5# 5 cm
+
+# Identificadores de Cores (SPIKE v3)
+COR_PRETA = color.BLACK
+COR_BRANCA = color.WHITE
+
+# Pareamento dos Motores
+motor_pair.pair(
+    motor_pair.PAIR_1,
+    MOTOR_ESQUERDO,
+    MOTOR_DIREITO
+)
+
+# Memória do percurso
+memoria_percurso = []
+
+def deg_for_cm(cm):
+    """Calcula os graus do motor necessários para percorrer uma distância em cm."""
+    return int(cm / CM_PER_ROT * 360)
+
+def ler_distancia_cm():
+    """Retorna a distância lida em cm."""
+    dist_mm = distance_sensor.distance(SENSOR_DISTANCIA)
+    if dist_mm is None or dist_mm == -1:
+        return 999
+    return dist_mm / 10.0
+
+def checar_cor():
+    """Retorna a cor identificada pelo sensor E."""
+    return color_sensor.color(SENSOR_COR)
+
+async def andar_cm_com_checagem(cm):
+    """
+    Anda até 'cm' centímetros monitorando a parede e a cor branca.
+    """
+    graus_objetivo = deg_for_cm(cm)
+    motor.reset_relative_position(MOTOR_ESQUERDO, 0)
+    motor_pair.move(motor_pair.PAIR_1, 0, velocity=VELOCIDADE)
+
+    status = "ok"
+
+    while True:
+        graus_atuais = abs(motor.relative_position(MOTOR_ESQUERDO))
+
+        # 1. Checa se chegou na linha branca de término
+        if checar_cor() == COR_BRANCA:
+            status = "branca"
+            break
+
+        # 2. Checa se andou a distância solicitada (20 cm)
+        if graus_atuais >= graus_objetivo:
+            break
+
+        # 3. Checa se encontrou parede na frente
+        if ler_distancia_cm() <= DISTANCIA_LIMITE_CM:
+            status = "obstaculo"
+            break
+
+        await runloop.sleep_ms(10)
+
+    motor_pair.stop(motor_pair.PAIR_1, stop=motor.BRAKE)
+    return status
+
+async def andar_cm_retorno(cm):
+    """
+    Anda no retorno monitorando a cor preta (Início).
+    """
+    graus_objetivo = deg_for_cm(cm)
+    motor.reset_relative_position(MOTOR_ESQUERDO, 0)
+    motor_pair.move(motor_pair.PAIR_1, 0, velocity=VELOCIDADE)
+
+    encontrou_preto = False
+
+    while True:
+        graus_atuais = abs(motor.relative_position(MOTOR_ESQUERDO))
+
+        if checar_cor() == COR_PRETA:
+            encontrou_preto = True
+            break
+
+        if graus_atuais >= graus_objetivo:
+            break
+
+        await runloop.sleep_ms(10)
+
+    motor_pair.stop(motor_pair.PAIR_1, stop=motor.BRAKE)
+    return encontrou_preto
+
+async def virar_direita_90():
+    """Gira 90 graus para a direita."""
+    await motor_pair.move_for_degrees(
+        motor_pair.PAIR_1,
+        180,
+        100,
+        velocity=VELOCIDADE_GIRO
+    )
+
+async def virar_esquerda_90():
+    """Gira 90 graus para a esquerda."""
+    await motor_pair.move_for_degrees(
+        motor_pair.PAIR_1,
+        180,
+        -100,
+        velocity=VELOCIDADE_GIRO
+    )
+
+async def virar_180():
+    """Gira 180 graus."""
+    await virar_direita_90()
+    await virar_direita_90()
+
+async def aguardar_cor_inicio():
+    """Aguarda ler a cor PRETA para dar a largada."""
+    while checar_cor() != COR_PRETA:
+        await runloop.sleep_ms(50)
+
+async def retornar_pela_memoria():
+    """Refaz o caminho inverso usando a memória registrada."""
+    await virar_180()
+    await runloop.sleep_ms(300)
+
+    for acao in reversed(memoria_percurso):
+        if checar_cor() == COR_PRETA:
+            break
+
+        if acao == "frente":
+            leu_preto = await andar_cm_retorno(20)
+            if leu_preto:
+                break
+        elif acao == "direita":
+            await virar_esquerda_90()
+        elif acao == "esquerda":
+            await virar_direita_90()
+
+        await runloop.sleep_ms(100)
+
+async def main():
+    # 1. Espera detectar a cor PRETA para dar a partida
+    await aguardar_cor_inicio()
+
+    chegou_ao_fim = False
+
+    # 2. Mapeamento e avanço direto inicial
+    while not chegou_ao_fim:
+        # Anda para frente e verifica a pista
+        status = await andar_cm_com_checagem(20)
+        await runloop.sleep_ms(100)
+
+        if status == "branca":
+            chegou_ao_fim = True
+            break
+
+        elif status == "ok":
+            # Guardou 20 cm reto na memória
+            memoria_percurso.append("frente")
+
+        elif status == "obstaculo":
+            # Só faz as curvas quando bate no obstáculo frontal (<= 5cm)
+            # Olhar para a DIREITA (+90°)
+            await virar_direita_90()
+            await runloop.sleep_ms(150)
+            dist_direita = ler_distancia_cm()
+            obstaculo_direita = dist_direita <= DISTANCIA_LIMITE_CM
+
+            # Olhar para a ESQUERDA (-180° a partir da direita)
+            await virar_esquerda_90()
+            await virar_esquerda_90()
+            await runloop.sleep_ms(150)
+            dist_esquerda = ler_distancia_cm()
+            obstaculo_esquerda = dist_esquerda <= DISTANCIA_LIMITE_CM
+
+            # Decisão de rota
+            if not obstaculo_direita:
+                # Vira para a direita e salva
+                await virar_direita_90()
+                await virar_direita_90()
+                memoria_percurso.append("direita")
+            elif not obstaculo_esquerda:
+                # Permanece na esquerda e salva
+                memoria_percurso.append("esquerda")
+            else:
+                # Retorna em 180°
+                await virar_direita_90()
+                await virar_direita_90()
+                memoria_percurso.append("direita")
+                memoria_percurso.append("direita")
+
+        await runloop.sleep_ms(50)
+
+    # 3. Executa o retorno se tiver chegado na linha branca
+    if chegou_ao_fim:
+        await retornar_pela_memoria()
+
+runloop.run(main())
