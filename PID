@@ -1,0 +1,24 @@
+from hub import port
+import motor, motor_pair, color_sensor, runloop
+motor_pair.pair(motor_pair.PAIR_1, port.A, port.B)
+# Segue o lado direito da linha preta (borda Preto-Branco).
+# Para seguir uma borda Branco-Preto, altere a condição de erro para (reflection - 50).
+async def pid_seguidor_linha():
+    integral = 0
+    anteriorErro = 0
+    while (True):
+        # Calcula o erro.
+        erro = 84 - color_sensor.reflection(port.E)
+        P_fix = erro * 2.05
+        integral = integral + erro
+        I_fix = integral * 0.001
+        derivada = erro - anteriorErro
+        anteriorErro = erro
+        D_fix = derivada * 0.80
+        # limita a correção no intervalo de -100 a 100 porque o SP3 aparentemente não faz isso internamente.
+        correcao = min(100, max(-100, int(P_fix + I_fix + D_fix)))
+        # use a correção como o comando de direção (steering)
+        motor_pair.move(motor_pair.PAIR_1, correcao, velocity = 300)
+async def main():
+    await pid_seguidor_linha()
+runloop.run(main())
